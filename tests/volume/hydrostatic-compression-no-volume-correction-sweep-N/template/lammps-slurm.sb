@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+#SBATCH --job-name=NNLAYERS-nu-0.25-comp
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=NTASKS
+#SBATCH --cpus-per-task=1
+#SBATCH --output=%x.%N.%j.out
+
+module reset
+module load gnu12/12.3.0
+module load openmpi4/4.1.6
+
+mpirun -n "${SLURM_NTASKS_PER_NODE}" /home/gsalkuin/LAMMPS-source/lammps-10Dec2025/lmp_tetmsm -in in.deform

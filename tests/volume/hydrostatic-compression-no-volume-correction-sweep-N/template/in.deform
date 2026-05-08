@@ -1,0 +1,195 @@
+##############################################################
+# Hydrostatic compression
+# Tetrahedral MSM with bond_style/improper_style tetmsm
+#
+# bond_style tetmsm:
+#   No user coefficients. Auto-computes kE per bond from
+#   G (extracted from improper_style) and mesh topology
+#   (sum of l_eff per edge, built in init_style).
+#
+# improper_style tetmsm:
+#   Coefficients: G  nu
+#   Computes kV internally from G, nu, and V0 per tet.
+#
+# All six faces constrained in normal direction only.
+# Affine compression applied to all atoms each step.
+# K = P / |ev|  from reaction forces on faces.
+#
+# Template: sed replaces N.LAYERS with mesh size
+##############################################################
+
+# ---- Material parameters ----
+variable        E      equal 1e4       # Young's modulus
+variable        NU     equal 0.25      # Poisson's ratio
+variable        G      equal "v_E / (2*(1 + v_NU))"
+
+variable        CUTOFF equal "8.0 / NLAYERS"
+
+##############################################################
+
+units           si
+dimension       3
+boundary        s s s
+processors      * * *
+
+atom_style      hybrid full sphere
+
+read_data       cube-NNLAYERS.lam nocoeff
+
+neighbor        $(v_CUTOFF*0.05) bin
+
+pair_style      zero ${CUTOFF}
+pair_coeff      * * ${CUTOFF}
+
+# ---- tetmsm styles ----
+bond_style      tetmsm
+improper_style  tetmsm
+
+bond_coeff      1
+improper_coeff  1 ${G} ${NU}
+
+##############################################################
+# GROUPS (cube in [0,1]^3)
+##############################################################
+
+region          rbot   block INF INF INF INF INF 0.01 units box
+region          rtop   block INF INF INF INF 0.99 INF units box
+region          rleft  block INF 0.01 INF INF INF INF units box
+region          rright block 0.99 INF INF INF INF INF units box
+region          rfront block INF INF INF 0.01 INF INF units box
+region          rback  block INF INF 0.99 INF INF INF units box
+
+group           gbot   region rbot
+group           gtop   region rtop
+group           gleft  region rleft
+group           gright region rright
+group           gfront region rfront
+group           gback  region rback
+
+group           walls  union gtop gbot gleft gright gfront gback
+group           mobile subtract all walls
+
+##############################################################
+# EQUILIBRATION
+##############################################################
+
+timestep        1e-4
+
+velocity        mobile create 0.01 12345 mom yes rot yes
+
+fix             nve mobile nve
+fix             lan mobile langevin 0.01 0 1e-2 12345
+fix             fbc_bot   gbot   setforce NULL NULL 0
+fix             fbc_top   gtop   setforce NULL NULL 0
+fix             fbc_left  gleft  setforce 0 NULL NULL
+fix             fbc_right gright setforce 0 NULL NULL
+fix             fbc_front gfront setforce NULL 0 NULL
+fix             fbc_back  gback  setforce NULL 0 NULL
+
+thermo          10000
+thermo_style    custom step pe temp press
+
+dump            deq all custom 10000 equil.dump id x y z
+dump_modify     deq sort id
+
+run             100000
+
+undump          deq
+
+##############################################################
+# REFERENCE GEOMETRY
+##############################################################
+
+compute         cxmax all reduce max x
+compute         cxmin all reduce min x
+compute         cymax all reduce max y
+compute         cymin all reduce min y
+compute         czmax all reduce max z
+compute         czmin all reduce min z
+
+variable        dx equal c_cxmax-c_cxmin
+variable        dy equal c_cymax-c_cymin
+variable        dz equal c_czmax-c_czmin
+
+run             0
+
+variable        Lx0 equal ${dx}
+variable        Ly0 equal ${dy}
+variable        Lz0 equal ${dz}
+
+variable        Ayz equal "v_Ly0 * v_Lz0"
+variable        Axz equal "v_Lx0 * v_Lz0"
+variable        Axy equal "v_Lx0 * v_Ly0"
+
+print           "Initial Lengths: ${Lx0}, ${Ly0}, ${Lz0}"
+
+##############################################################
+# DEFORMATION SETUP
+##############################################################
+
+reset_timestep  0
+
+variable        emax  equal 0.02
+variable        Nstep equal 20
+variable        de    equal "v_emax / v_Nstep"
+
+variable        nrelax equal 100000
+
+# ---- Nonaffine displacement ----
+fix             fnad all nonaffine/displacement 1 d2min custom ${CUTOFF} fixed 0
+
+variable        nad_atom atom sqrt(f_fnad[1]*f_fnad[1]+f_fnad[2]*f_fnad[2]+f_fnad[3]*f_fnad[3])
+compute         cnad all reduce ave v_nad_atom
+
+# ---- Strains ----
+variable        ex equal "(v_dx - v_Lx0) / v_Lx0"
+variable        ey equal "(v_dy - v_Ly0) / v_Ly0"
+variable        ez equal "(v_dz - v_Lz0) / v_Lz0"
+variable        ev equal "v_ex + v_ey + v_ez"
+
+# ---- Pressure from reaction forces ----
+variable        sx equal "-f_fbc_right[1] / v_Ayz"
+variable        sy equal "-f_fbc_back[2] / v_Axz"
+variable        sz equal "-f_fbc_top[3] / v_Axy"
+variable        P  equal "(v_sx + v_sy + v_sz) / 3.0"
+
+variable        anad equal c_cnad
+
+# ---- Thermo & output ----
+thermo          10000
+thermo_style    custom step temp press c_cnad
+
+fix             fprnt all print 10000 &
+                "${ev} ${P} ${ex} ${ey} ${ez} ${sx} ${sy} ${sz} ${anad}" &
+                file hydro-NNLAYERS.txt screen no &
+                title "# ev P ex ey ez sx sy sz anad"
+
+dump            ddef all custom 50000 hydro-NNLAYERS.dump &
+                id type x y z fx fy fz v_nad_atom
+dump_modify     ddef sort id
+
+##############################################################
+# COMPRESSION LOOP
+# Affine: dx = -de*x, dy = -de*y, dz = -de*z on ALL atoms
+##############################################################
+
+variable        disx atom "-v_de * x"
+variable        disy atom "-v_de * y"
+variable        disz atom "-v_de * z"
+
+velocity        all set 0 0 0
+fix             lan mobile langevin 0.01 0 1e-2 12345
+
+variable        k loop ${Nstep}
+label           LOOPSTART
+
+    displace_atoms all move v_disx v_disy v_disz units box
+
+    velocity    all zero linear
+
+    run         ${nrelax}
+
+next            k
+jump            SELF LOOPSTART
+
+print           "Done. ev=${ev}, P=${P}"

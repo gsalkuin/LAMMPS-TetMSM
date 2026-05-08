@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tetmsm"
+version = "0.1.0"
+description = "Tetrahedral mass-spring model pipeline for LAMMPS"
+requires-python = ">=3.7"
+dependencies = [
+    "numpy",
+    "meshio",
+    "libigl",
+]
+
+[tool.setuptools]
+packages = ["tetmsm"]
