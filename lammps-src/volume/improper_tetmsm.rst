@@ -81,7 +81,7 @@ The volume stiffness :math:`\kappa_V` is computed internally from the coefficien
 
 .. math::
 
-   \kappa_V = \frac{G\,(4\nu - 1)}{1 - 2\nu}
+   \kappa_V = \text{scale} \cdot \frac{G\,(4\nu - 1)}{1 - 2\nu}
 
 For a MSM with only central-force springs, the Cauchy relations require :math:`\nu = 1/4`;
 a volumetric term is added to achieve other values of :math:`\nu`

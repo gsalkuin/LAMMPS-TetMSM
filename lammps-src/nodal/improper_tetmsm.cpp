@@ -113,6 +113,9 @@ void ImproperTetMSM::init_style()
   if (!allocated)
     error->all(FLERR, "Improper tetmsm: coefficients are not set (missing improper_coeff)");
 
+  if (!force->newton_bond)
+    error->all(FLERR, "Improper tetmsm (nodal): newton_bond must be on");
+
   // Determine if this is a single-material volume penalty (required)
 
   kappa_common_set = false;
@@ -231,7 +234,6 @@ void ImproperTetMSM::compute(int eflag, int vflag)
     const double vol = compute_tet_volume(x, i1, i2, i3, i4);
     if (vol <= 0.0)
       error->one(FLERR, "Improper tetmsm: non-positive tetrahedron volume; check vertex ordering");
-
     const double vshare = 0.25 * vol;
 
     if (newton_bond) {
