@@ -195,12 +195,18 @@ class Composite:
             if p.magnet_flag:
                 self.magnet_flag = True
                 n += 1
-                bF = self.tet_mesh.bF_into_V_per_block[p.cell_block_index]
-                c, _ = igl.orientable_patches(bF)
-                bF = igl.orient_outward(self.V_into_xyz, bF, c)[0]
-                bF = igl.bfs_orient(bF)[0]
+                bF = np.asarray(self.tet_mesh.bF_into_V_per_block[p.cell_block_index][0], dtype=np.int64)
+
                 normals = igl.per_face_normals(self.V_into_xyz, bF, np.array([]))
                 areas = igl.doublearea(self.V_into_xyz, bF) / 2.0
+
+                # Orient outward: flip faces whose normal points toward part centroid
+                face_centers = self.V_into_xyz[bF].mean(axis=1)
+                part_center = self.V_into_xyz[p.T_into_V.flatten()].mean(axis=0)
+                sign = np.sign(np.sum((face_centers - part_center) * normals, axis=1))
+                sign[sign == 0] = 1.0
+                normals *= sign[:, None]
+
                 q_per_F = areas * np.sum(p.M_vec[None, :] * normals, axis=1)
                 for idx, v in np.ndenumerate(bF):
                     self.V_into_q[v] += q_per_F[idx[0]] / 3.0
