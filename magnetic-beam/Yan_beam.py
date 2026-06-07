@@ -27,7 +27,7 @@ A = W * h
 Mr = 0.941
 dBmax = 0.1437
 
-M_vec = np.array([Mr, 0, 0])
+M_vec = np.array([0, 0, Mr])
 
 print(f"E={E:g} Pa, nu={nu:g} -> G={G:g} Pa")
 print(f"LAMMPS: improper_coeff * {G:.16g} {nu:.16g}")
@@ -36,6 +36,10 @@ for N in [4, 8]:
     msh_file = f"Yan-beam-N{N}"
 
     tet_mesh = TetMesh(msh_file)
+
+    # Recenter z
+    z_centroid = tet_mesh.V_into_xyz[:, 2].mean()
+    tet_mesh.V_into_xyz[:, 2] -= z_centroid
 
     # CFL-like estimate based on P-wave speed (units: meters, seconds in `units si`).
     # dt_safe = cfl * h_min / c_p
@@ -52,7 +56,7 @@ for N in [4, 8]:
 
     # NOTE: `elastic_per_cell_block` controls elastic vs rigid blocks.
     comp = Composite(tet_mesh, rho_per_cell_block=[rho], elastic_per_cell_block=[True], M_vec_per_cell_block=[M_vec])
-    outbase = write_lam([comp], filename=msh_file + "-Mx")
+    outbase = write_lam([comp], filename=msh_file + "-Mz")
 
     NB = 0 if comp.bonds is None else int(comp.bonds.shape[0])
     NI = 0 if comp.impropers is None else int(comp.impropers.shape[0])
