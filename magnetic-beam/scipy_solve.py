@@ -384,7 +384,7 @@ class LocalGlobalSolver:
 
     # ----------------------------------------------------------- output
     def tip_deflection(self):
-        right = self.pos0[:, 0] > self.L_beam - 0.1
+        right = self.pos0[:, 0] > self.L_beam - 0.05
         if not np.any(right):
             return 0.0, 0.0
         tip = self.pos[right].mean(axis=0)
@@ -406,6 +406,48 @@ class LocalGlobalSolver:
                 p = self.pos[i]
                 f.write(f"{i+1} {t} {p[0]:.8f} {p[1]:.8f} "
                         f"{p[2]:.8f} {self.q[i]:.8e}\n")
+
+    def save_state(self, filename, rows=None, next_index=0,
+                   prev_pos=None, prev_prev_pos=None,
+                   prev_lam=None, prev_lam_prev=None):
+        out_dir = os.path.dirname(filename)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+        data = {
+            "pos": self.pos,
+            "vel": self.vel,
+            "last_converged": np.array(bool(self.last_converged)),
+            "next_index": np.array(int(next_index)),
+            "prev_pos": np.array(prev_pos) if prev_pos is not None else np.empty((0, 3)),
+            "prev_prev_pos": np.array(prev_prev_pos) if prev_prev_pos is not None else np.empty((0, 3)),
+            "prev_lam": np.array(np.nan if prev_lam is None else float(prev_lam)),
+            "prev_lam_prev": np.array(np.nan if prev_lam_prev is None else float(prev_lam_prev)),
+            "rows": np.array(rows, dtype=float) if rows is not None else np.empty((0, 3)),
+        }
+        np.savez_compressed(filename, **data)
+
+    def load_state(self, filename):
+        data = np.load(filename, allow_pickle=False)
+        self.pos = data["pos"].astype(np.float64).copy()
+        self.vel = data["vel"].astype(np.float64).copy()
+        self.last_converged = bool(np.asarray(data["last_converged"]).item()) if "last_converged" in data else False
+        prev_pos = data["prev_pos"] if "prev_pos" in data else np.empty((0, 3))
+        prev_prev_pos = data["prev_prev_pos"] if "prev_prev_pos" in data else np.empty((0, 3))
+        prev_lam_arr = np.asarray(data["prev_lam"]) if "prev_lam" in data else np.array(np.nan)
+        prev_lam_prev_arr = np.asarray(data["prev_lam_prev"]) if "prev_lam_prev" in data else np.array(np.nan)
+        prev_lam = float(prev_lam_arr) if np.isfinite(prev_lam_arr).item() else None
+        prev_lam_prev = float(prev_lam_prev_arr) if np.isfinite(prev_lam_prev_arr).item() else None
+        rows = data["rows"] if "rows" in data else np.empty((0, 3))
+        next_index = int(data["next_index"]) if "next_index" in data else 0
+        return {
+            "prev_pos": prev_pos if len(prev_pos) else None,
+            "prev_prev_pos": prev_prev_pos if len(prev_prev_pos) else None,
+            "prev_lam": prev_lam,
+            "prev_lam_prev": prev_lam_prev,
+            "rows": rows,
+            "next_index": next_index,
+            "resume_current": next_index < len(rows),
+        }
 
 
 # ============================================================ data reader
@@ -459,11 +501,19 @@ def read_lammps_data(filename):
 
 # ============================================================ main
 if __name__ == "__main__":
-    import sys
+    import argparse
     import os
     os.makedirs("dump", exist_ok=True)
 
-    data_file = sys.argv[1] if len(sys.argv) > 1 else "Yan-beam-N4-Mz.lam"
+    parser = argparse.ArgumentParser()
+    parser.add_argument("data_file", nargs="?", default="Yan-beam-N4-Mz.lam")
+    parser.add_argument("--state-in", dest="state_in", default=None,
+                        help="load a saved solver state from an .npz file")
+    parser.add_argument("--state-out", dest="state_out", default=None,
+                        help="write the last converged solver state to an .npz file")
+    args = parser.parse_args()
+
+    data_file = args.data_file
     print(f"Reading {data_file}")
     pos, tets, bonds, charges = read_lammps_data(data_file)
     print(f"  {len(pos)} verts, {len(bonds)} bonds, {len(tets)} tets")
@@ -477,52 +527,113 @@ if __name__ == "__main__":
     solver.clamp(x_max=0.05)
     solver.prefactor(h=0.5)
 
-    # Gravity
-    print("\nGravity relaxation:")
-    solver.solve(dB=0.0, n_steps=1000, n_iters=5, damping=1.0, tol=5e-7,
-                 energy_relax=0.0, anderson_m=0)
-    dx, dz = solver.tip_deflection()
-    print(f"  tip: dx/L = {dx:.6e}, dz/L = {dz:.6e}")
-    solver.write_dump("dump/gravity.dump")
+    state_meta = {
+        "prev_pos": None,
+        "prev_prev_pos": None,
+        "prev_lam": None,
+        "prev_lam_prev": None,
+        "rows": [],
+        "next_index": 0,
+    }
+    if args.state_in:
+        print(f"Loading restart state: {args.state_in}")
+        state_meta = solver.load_state(args.state_in)
+        solver.prefactor(h=0.5)
+        print(
+            f"  restored {len(state_meta['rows'])} sweep rows, "
+            f"next index = {state_meta['next_index']}"
+        )
+    else:
+        # Gravity
+        print("\nGravity relaxation:")
+        solver.solve(dB=0.0, n_steps=1000, n_iters=5, damping=1.0, tol=5e-7,
+                     energy_relax=0.0, anderson_m=0)
+        dx, dz = solver.tip_deflection()
+        print(f"  tip: dx/L = {dx:.6e}, dz/L = {dz:.6e}")
+        solver.write_dump("dump/gravity.dump")
 
     solver.prefactor(h=5.0)
 
     # Incremental efield
     dBone = 1.437e-3
-    dB_vals = [dBone * i for i in [0.01, 0.1, 0.2, 0.5, 0.75, 1, 2, 3, 4, 5, 8, 10, 12, 15, 20, 25, 30, 40, 50, 60, 80, 100]]
+    dB_vals = [dBone * i for i in [0.01, 0.1, 0.2, 0.5, 0.75, 1, 2, 3, 3.5, 4, 5, 8, 10, 12, 15, 20, 25, 30, 40, 50, 60, 80, 100]]
     out_txt = os.path.join(
         "dump",
         os.path.basename(data_file).replace("Yan-beam", "Yan").replace(".lam", "-deflection.txt"),
     )
-    rows = []
 
     print("\n#   lambda      dx/L          dz/L")
-    prev_prev_pos = None
-    prev_pos = solver.pos.copy()
-    prev_lam = None
-    prev_lam_prev = None
-    for k, dB in enumerate(dB_vals):
+    rows = [tuple(row) for row in state_meta["rows"]]
+    prev_prev_pos = state_meta["prev_prev_pos"]
+    prev_pos = state_meta["prev_pos"] if state_meta["prev_pos"] is not None else solver.pos.copy()
+    prev_lam = state_meta["prev_lam"]
+    prev_lam_prev = state_meta["prev_lam_prev"]
+    start_index = int(state_meta["next_index"])
+    resume_current = bool(state_meta.get("resume_current", False))
+    saved_state = False
+    if start_index < len(rows):
+        rows = rows[:start_index]
+    with open(out_txt, "w") as f_txt:
+        f_txt.write("# lambda deltax deltaz\n")
+        for lam, dx, dz in rows:
+            f_txt.write(f"{lam:.16g} {dx:.16g} {dz:.16g}\n")
+    for k, dB in enumerate(dB_vals[start_index:], start=start_index):
         lam = dB / dBone
-        if prev_lam is not None and prev_lam_prev is not None:
+        if prev_lam is not None and prev_lam_prev is not None and not (resume_current and k == start_index):
             solver.predict_from(prev_pos, prev_prev_pos, prev_lam, prev_lam_prev, lam)
         print(f"\nField loading: lambda {lam:.2f}")
         converged = solver.solve(dB=dB, n_steps=1000, n_iters=10, damping=1.0,
-                                 tol=1e-7, energy_relax=1e-3, anderson_m=3,
+                                 tol=1e-8, energy_relax=1e-3, anderson_m=3,
                                  verbose=True)
         dx, dz = solver.tip_deflection()
         print(f"  lambda {lam:6.2f}: dx/L = {dx:14.6e}, dz/L = {dz:14.6e}")
+        rows.append((lam, dx, dz))
+        with open(out_txt, "a") as f_txt:
+            f_txt.write(f"{lam:.16g} {dx:.16g} {dz:.16g}\n")
         if converged:
-            rows.append((lam, dx, dz))
             prev_prev_pos = prev_pos
             prev_pos = solver.pos.copy()
             prev_lam_prev = prev_lam
             prev_lam = lam
+            if args.state_out:
+                solver.save_state(
+                    args.state_out,
+                    rows=rows,
+                    next_index=k + 1,
+                    prev_pos=prev_pos,
+                    prev_prev_pos=prev_prev_pos,
+                    prev_lam=prev_lam,
+                    prev_lam_prev=prev_lam_prev,
+                )
+                saved_state = True
+                print(f"  saved restart state: {args.state_out}")
         else:
-            print(f"  WARNING: lambda {lam:.2f} did not converge; skipping text output")
+            print(f"  WARNING: lambda {lam:.2f} did not converge; stopping sweep")
+            if args.state_out:
+                solver.save_state(
+                    args.state_out,
+                    rows=rows,
+                    next_index=k,
+                    prev_pos=solver.pos.copy(),
+                    prev_prev_pos=prev_pos,
+                    prev_lam=prev_lam,
+                    prev_lam_prev=prev_lam_prev,
+                )
+                saved_state = True
+                print(f"  saved restart state: {args.state_out}")
+            solver.write_dump(f"dump/lambda-{lam:.2f}.dump")
+            if args.state_out:
+                print(
+                    f"  Restart from {args.state_out} with --state-in "
+                    f"{args.state_out}"
+                )
+            else:
+                print(
+                    "  Rerun with --state-out <restart.npz> if you want an "
+                    "automatic resume point next time"
+                )
+            break
         solver.write_dump(f"dump/lambda-{lam:.2f}.dump")
-
-    with open(out_txt, "w") as f:
-        f.write("# lambda deltax deltaz\n")
-        for lam, dx, dz in rows:
-            f.write(f"{lam:.16g} {dx:.16g} {dz:.16g}\n")
-    print(f"\nWrote converged sweep table: {out_txt}")
+    print(f"\nWrote sweep table: {out_txt}")
+    if args.state_out and saved_state:
+        print(f"Wrote restart state: {args.state_out}")
