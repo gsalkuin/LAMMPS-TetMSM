@@ -556,7 +556,7 @@ if __name__ == "__main__":
 
     # Incremental efield
     dBone = 1.437e-3
-    dB_vals = [dBone * i for i in [0.01, 0.1, 0.2, 0.5, 0.75, 1, 2, 3, 3.5, 4, 5, 8, 10, 12, 15, 20, 25, 30, 40, 50, 60, 80, 100]]
+    dB_vals = [dBone * i for i in [0.01, 0.1, 0.2, 0.5, 0.75, 1, 2, 3, 3.5, 4, 5, 8, 10, 12, 15, 20, 25, 30, 35, 40, 50, 60, 80, 100]]
     out_txt = os.path.join(
         "dump",
         os.path.basename(data_file).replace("Yan-beam", "Yan").replace(".lam", "-deflection.txt"),
@@ -582,8 +582,8 @@ if __name__ == "__main__":
         if prev_lam is not None and prev_lam_prev is not None and not (resume_current and k == start_index):
             solver.predict_from(prev_pos, prev_prev_pos, prev_lam, prev_lam_prev, lam)
         print(f"\nField loading: lambda {lam:.2f}")
-        converged = solver.solve(dB=dB, n_steps=1000, n_iters=10, damping=1.0,
-                                 tol=1e-8, energy_relax=1e-3, anderson_m=3,
+        converged = solver.solve(dB=dB, n_steps=5000, n_iters=10, damping=1.0,
+                                 tol=1e-6, energy_relax=1e-3, anderson_m=3,
                                  verbose=True)
         dx, dz = solver.tip_deflection()
         print(f"  lambda {lam:6.2f}: dx/L = {dx:14.6e}, dz/L = {dz:14.6e}")

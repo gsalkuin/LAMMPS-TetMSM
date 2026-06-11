@@ -12,7 +12,7 @@ plt.scatter([], [], label=r'$\delta_y$', marker='o', edgecolors='tab:blue', face
 plt.scatter(PK2[:,0], -PK2[:,1], marker='o', facecolors='none', edgecolors='tab:orange')
 plt.scatter(PK2[:,0], PK2[:,2], marker='o', facecolors='none', edgecolors='tab:blue')
 
-msm = np.loadtxt('Yan-N4-Mz-deflection.txt')
+msm = np.loadtxt('dump/Yan-N4-Mz-deflection.txt')
 
 # get the index for the last unique B
 idx = np.roll(np.unique(msm[:,0], return_index=True)[1], -1) - 1
