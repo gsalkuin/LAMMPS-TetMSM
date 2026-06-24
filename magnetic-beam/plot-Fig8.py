@@ -49,6 +49,6 @@ plt.xlabel(r'$\lambda_m^\nabla$', fontsize=14)
 plt.ylabel(r'$\delta/L$', fontsize=14)
 plt.tight_layout()
 
-# plt.savefig("Fig8-FEM-vs-MSM.png", dpi=600)
+plt.savefig("YanFig8-FEM-LSM-MSM.png", dpi=600)
 
 plt.show()
