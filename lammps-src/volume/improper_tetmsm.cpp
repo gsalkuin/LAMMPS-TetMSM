@@ -112,12 +112,9 @@ double ImproperTetMSM::get_v0(int64_t t1, int64_t t2, int64_t t3, int64_t t4,
   auto it = v0_map.find(key);
   if (it != v0_map.end()) return it->second;
 
-  double vol = compute_tet_volume(x, i1, i2, i3, i4);
-  if (vol <= 0.0)
-    error->one(FLERR, "Improper tetmsm: non-positive reference volume; "
-               "check vertex ordering");
-  v0_map[key] = vol;
-  return vol;
+  error->one(FLERR, "Improper tetmsm: missing reference volume for tet; "
+             "increase communication cutoff or check mesh");
+  return 0.0;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -352,8 +349,6 @@ void ImproperTetMSM::coeff(int narg, char **arg)
 
 void ImproperTetMSM::write_restart(FILE *fp)
 {
-  fwrite(&scale, sizeof(double), 1, fp);
-
   fwrite(&G_coeff[1], sizeof(double), atom->nimpropertypes, fp);
   fwrite(&nu_coeff[1], sizeof(double), atom->nimpropertypes, fp);
   fwrite(&kappa_v[1], sizeof(double), atom->nimpropertypes, fp);
@@ -374,12 +369,6 @@ void ImproperTetMSM::write_restart(FILE *fp)
 void ImproperTetMSM::read_restart(FILE *fp)
 {
   allocate();
-
-  if (comm->me == 0) {
-    utils::sfread(FLERR, &scale, sizeof(double), 1, fp, nullptr, error);
-  }
-  MPI_Bcast(&scale, 1, MPI_DOUBLE, 0, world);
-  scale_set = true;
 
   if (comm->me == 0) {
     utils::sfread(FLERR, &G_coeff[1], sizeof(double), atom->nimpropertypes,
@@ -428,14 +417,17 @@ void ImproperTetMSM::read_restart(FILE *fp)
 
 void ImproperTetMSM::write_restart_settings(FILE *fp)
 {
-  write_restart(fp);
+  fwrite(&scale, sizeof(double), 1, fp);
 }
 
 /* ---------------------------------------------------------------------- */
 
 void ImproperTetMSM::read_restart_settings(FILE *fp)
 {
-  read_restart(fp);
+  if (comm->me == 0)
+    utils::sfread(FLERR, &scale, sizeof(double), 1, fp, nullptr, error);
+  MPI_Bcast(&scale, 1, MPI_DOUBLE, 0, world);
+  scale_set = true;
 }
 
 /* ---------------------------------------------------------------------- */

@@ -128,14 +128,14 @@ W^{(e)} = G \left( \frac{1}{2} (\text{tr}\boldsymbol{\varepsilon})^2 + \boldsymb
 $$
 
 where $G$ is the shear modulus.
-Since $G$ alone parameterizes the edge spring stiffness ($E = 2G(1+\nu)$),
-we can rewrite Eq. 1 as
+At the Cauchy value $\nu = 1/4$, we have $E = 2.5G$, and Eq. 1 simplifies to
 
 $$
 k_e = \frac{\sqrt{2}}{5} G \sum_{\Delta}^{\text{adj.\ tets}} \tilde{l}_\Delta, \qquad (3)
 $$
 
-which we expect to be valid for arbitrary $\nu$. A unique
+The same $G$-dependent spring constant is retained for arbitrary $\nu$; the
+volume penalty (see below) then provides the additional $\nu$-dependence. A unique
 edge $e$ of the mesh has bond energy
 
 $$
@@ -154,7 +154,7 @@ where $\kappa := K - \tfrac{5}{3}G$, with $K$ being the bulk modulus.
 Substituting $K = 2G(1+\nu)/[3(1-2\nu)]$, the volume stiffness becomes
 
 $$
-\kappa_V \equiv \kappa = \frac{G\,(4\nu - 1)}{1 - 2\nu}. \qquad (6)
+\kappa_V \equiv \kappa = \text{scale} \cdot \frac{G\,(4\nu - 1)}{1 - 2\nu}. \qquad (6)
 $$
 
 At $\nu = 1/4$, $\kappa_V = 0$ and the model reduces to Lloyd's springs-only MSM.
@@ -213,12 +213,18 @@ two passes over the improper list—first to accumulate nodal volumes
 (with reverse/forward ghost communication), then to compute forces—and
 all improper types must share the same $G$ and $\nu$.
 
-> **Note:** In our beam validation tests, the nodal-averaged formulation
-> produces systematically incorrect elastic moduli and Poisson's ratio.
-> The averaging-before-squaring structure (Jensen's inequality) makes
-> the penalty too soft on structured meshes, under-penalizing non-uniform
-> volumetric deformation. The **`volume` implementation is recommended**
-> for general use.
+> **Note:** In beam validation tests, the nodal-averaged formulation
+> produces systematically incorrect elastic moduli and Poisson's ratio
+> (e.g., input $\nu=0.40$ yields measured $\nu\approx 0.23$ on a structured
+> N8 mesh). The code implements the standard ANP algorithm exactly, but
+> ANP is designed for a **Selective S-FEM** framework where the
+> deviatoric part uses face-based smoothing (FS-FEM). TetMSM's springs
+> are standard MSM bonds (fixed at their $\nu=1/4$ value), not FS-FEM
+> smoothed strains, so the required selective combination is absent and
+> the volumetric stiffness is severely under-delivered on coarse meshes.
+> The **`volume` implementation is recommended** for general use; the
+> `nodal` implementation is retained as a reference but should be
+> considered experimental.
 
 ## Python pipeline
 

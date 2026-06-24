@@ -392,6 +392,7 @@ double BondTetMSM::equilibrium_distance(int /*type*/)
       double dx = x[i][0] - x[k][0];
       double dy = x[i][1] - x[k][1];
       double dz = x[i][2] - x[k][2];
+      domain->minimum_image(FLERR, dx, dy, dz);
       maxlen = fmax(maxlen, sqrt(dx * dx + dy * dy + dz * dz));
     }
   }

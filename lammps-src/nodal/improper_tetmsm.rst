@@ -97,10 +97,11 @@ command after the improper style has been defined.
 
 .. note::
 
-   This style creates two internal fixes: a ``fix property/atom`` to
-   store the per-node volumes (``d_nodalvol``, ``d_nodalvol0``) and a
-   communication helper fix.  These are managed automatically and
-   should not be deleted or modified by the user.
+   This style creates an internal ``fix property/atom`` to store the
+   per-node reference volumes (``d_nodalvol0``) and a communication
+   helper fix (``fix tetmsm/comm``) for MPI exchanges.  These are
+   managed automatically and should not be deleted or modified by the
+   user.
 
 ----------
 
