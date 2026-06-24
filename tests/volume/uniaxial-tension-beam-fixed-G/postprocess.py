@@ -122,6 +122,8 @@ fig_ss.savefig("beam_ss_fits.png", dpi=150)
 # ==================================================================
 # FIGURE 2: E and G ratios vs nu_input
 # ==================================================================
+fig2_fontsize = 14
+fig2_ticksize = 12
 fig_sum, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5))
 
 nus_in = np.array([r["nu_in"] for r in results])
@@ -129,25 +131,27 @@ E_ratio = np.array([r["E_meas"] / r["E_in"] for r in results])
 G_ratio = np.array([r["G_meas"] / G_input for r in results])
 
 # ax1.plot(nus_in, E_ratio, "ko-", ms=7, label="$E_{meas}/E_{input}$")
-ax1.plot(nus_in, G_ratio, "s--", ms=6, color="C0", label="$G_{meas}/G_{input}$")
+ax1.plot(nus_in, G_ratio, "s--", ms=6, color="C0")
 ax1.axhline(1.0, ls="--", color="gray", lw=0.8)
-ax1.set_xlabel("$\\nu_{input}$")
-ax1.set_ylabel("Ratio")
-ax1.set_title(f"Elastic moduli (G = {G_input:.0f})")
-ax1.legend()
+ax1.set_xlabel("$\\nu_{input}$", fontsize=fig2_fontsize)
+ax1.set_ylabel("$G_{meas}/G_{input}$", fontsize=fig2_fontsize)
+# ax1.set_title(f"Elastic moduli (G = {G_input:.0f})", fontsize=16)
+ax1.tick_params(axis="both", which="major", labelsize=fig2_ticksize)
+# ax1.legend(fontsize=fig2_fontsize)
 
 # Right: nu_measured vs nu_input
 nu_meas_arr = np.array([r["nu_meas"] for r in results])
-ax2.plot(nus_in, nu_meas_arr, "ko", ms=7, label="Measured")
+ax2.plot(nus_in, nu_meas_arr, "ko", ms=7)
 nu_line = np.linspace(nus_in.min() - 0.05, 0.50, 100)
-ax2.plot(nu_line, nu_line, "--", color="gray", lw=0.8, label="Target")
-ax2.set_xlabel("$\\nu_{input}$")
-ax2.set_ylabel("$\\nu_{measured}$")
-ax2.set_title("Poisson's ratio")
-ax2.legend()
+ax2.plot(nu_line, nu_line, "--", color="gray", lw=0.8)
+ax2.set_xlabel("$\\nu_{input}$", fontsize=fig2_fontsize)
+ax2.set_ylabel("$\\nu_{measured}$", fontsize=fig2_fontsize)
+# ax2.set_title("Poisson's ratio")
+ax2.tick_params(axis="both", which="major", labelsize=fig2_ticksize)
+# ax2.legend(fontsize=fig2_fontsize)
 
 fig_sum.tight_layout()
-fig_sum.savefig("beam_Enu_summary.png", dpi=150)
+fig_sum.savefig("beam_G_nu_volume.png", dpi=300)
 
 # ==================================================================
 # FIGURE 3: Errors
